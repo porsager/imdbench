@@ -37,34 +37,56 @@ module.exports = function(options) {
   return api
 
   async function get_user(id) {
-    const [user] = await sql`
+    const xs = await sql`
       select
         u.id,
         u.name,
         u.image,
-        json_agg(q) as latest_reviews
+        q.review_id,
+        q.review_body,
+        q.review_rating,
+        q.movie_id,
+        q.movie_image,
+        q.movie_title,
+        q.movie_avg_rating
       from users u, lateral (
         select
           r.id as review_id,
           r.body as review_body,
           r.rating as review_rating,
-          json_build_object(
-            'id', m.id,
-            'image', m.image,
-            'title', m.title,
-            'avg_rating', m.avg_rating::float
-          ) as movie
-        from reviews as r
-        inner join movies as m on (r.movie_id = m.id)
-        where r.author_id = u.id
-        order by r.creation_time desc
+          m.id as movie_id,
+          m.image as movie_image,
+          m.title as movie_title,
+          m.avg_rating as movie_avg_rating
+        from
+          reviews as r
+          inner join movies as m
+              on (r.movie_id = m.id)
+        where
+          r.author_id = u.id
+        order by
+          r.creation_time desc
         limit 10
       ) as q
       where u.id = ${ id }
-      group by u.id
     `
 
-    return user
+    return {
+      id: xs[0].id,
+      name: xs[0].name,
+      image: xs[0].image,
+      latest_reviews: xs.map(x => ({
+        id: x.review_id,
+        body: x.review_body,
+        rating: x.review_rating,
+        movie: {
+          id: x.movie_id,
+          image: x.movie_image,
+          title: x.movie_title,
+          avg_rating: x.movie_avg_rating
+        }
+      }))
+    }
   }
 
   async function get_movie(id) {
